@@ -12,6 +12,10 @@
 
 演示视频：打开即看动态流动箭头效果
 
+https://github.com/user-attachments/assets/1d846060-5848-4b84-900c-163d6488fce3
+
+
+
 <video src="preview.mp4" controls style="max-width:100%"></video>
 
 ## 快速开始
