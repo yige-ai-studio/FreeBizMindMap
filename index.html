@@ -244,6 +244,43 @@
     .help-panel { width:96vw; max-height:90vh; }
     .help-head .help-sub { display:none; }
   }
+
+/* ===================== v4.3 折叠角标（每枝独立 + 数量）：贴边小箭头，不再挂圆球 ===================== */
+.fold-badge{ cursor:pointer; opacity:.95; transition:opacity .15s; }
+.fold-badge .pill{ fill:#eef1f6; stroke:#ccd4de; stroke-width:1; transition:fill .15s, stroke .15s; }
+.fold-badge .chev{ fill:none; stroke:#5b6671; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round;
+  transition:stroke .15s; }
+.fold-badge .fold-num{ font-size:9px; font-weight:700; fill:#69737d; font-family:inherit; transition:fill .15s; }
+.fold-badge .hit{ fill:transparent; }
+.node-group:hover .fold-badge .pill{ fill:#e2e8f1; stroke:#b9c4d2; }
+.fold-badge:hover .pill{ fill:#dbe4f0; stroke:#9fb0c6; }
+.fold-badge:hover .chev{ stroke:#2b5fd9; }
+.fold-badge:hover .fold-num{ fill:#2b5fd9; }
+.fold-badge.collapsed .pill{ fill:#2f6bf0; stroke:#2f6bf0; }
+.fold-badge.collapsed .chev{ stroke:#ffffff; stroke-width:2.6; }
+.fold-badge.collapsed .fold-num{ fill:#ffffff; }
+.fold-badge.collapsed:hover .pill{ fill:#1c4fc4; stroke:#1c4fc4; }
+/* v6.2 折叠开关：常显、恒为灰「−」，收起/展开共用同一颗圆点。
+   位置一律在「连线离开父卡边缘的出口」外 10px；不产生蓝色＋、卡名等任何新标记。 */
+.fold-dot{ cursor:pointer; opacity:1; }
+.fold-dot .hit{ fill:transparent; }
+.fold-dot .ring{ fill:#ffffff; stroke:#c6cfda; stroke-width:1.1; transition:stroke .15s; }
+.fold-dot .sign{ fill:none; stroke:#8b97a6; stroke-width:1.6; stroke-linecap:round; pointer-events:none; }
+.fold-dot:hover .ring{ stroke:#7f93b0; }
+.fold-dot:hover .sign{ stroke:#5b6671; }
+/* v5.0：已藏清单浮层 */
+#hidden-panel{ position:fixed; z-index:9999; top:72px; right:18px; width:272px; max-height:62vh; overflow:auto;
+  background:#fff; border:1px solid #e3e8f0; border-radius:12px; box-shadow:0 10px 30px rgba(20,30,60,.18);
+  padding:10px 12px; font-size:13px; color:#2c3038; }
+#hidden-panel .hp-title{ font-weight:600; margin-bottom:8px; color:#1c4fc4; }
+#hidden-panel .hp-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:5px 0; border-bottom:1px dashed #eef1f6; }
+#hidden-panel .hp-row span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#hidden-panel .hp-row button{ flex:0 0 auto; border:1px solid #cfe0ff; background:#f2f7ff; color:#2f6bf0; border-radius:8px; padding:2px 9px; cursor:pointer; font-size:12px; }
+#hidden-panel .hp-row button:hover{ background:#2f6bf0; color:#fff; }
+#hidden-panel .hp-foot{ display:flex; gap:8px; margin-top:10px; }
+#hidden-panel .hp-foot button{ flex:1; border:1px solid #dfe4ec; background:#f8fafc; border-radius:8px; padding:5px 0; cursor:pointer; font-size:12px; color:#4a5566; }
+#hidden-panel .hp-foot button:hover{ background:#eef2f8; }
+#btn-hiddenlist{ border-color:#ffb27a !important; color:#c2560a !important; background:#fff6ec !important; }
 </style>
 </head>
 <body>
@@ -266,6 +303,10 @@
   </select>
   <button id="btn-layout" data-i18n="applyLayout">应用布局</button>
   <button id="btn-ortho" data-i18n="ortho" data-i18n-title="orthoTip" title="点一下：所有线变横平竖直的直角线；再点一下变回自然曲线" style="background: rgb(238, 244, 255); border-color: rgb(74, 124, 247); color: rgb(43, 95, 217);">直角连线</button>
+  <button id="btn-collapseall" disabled title="已停用：一次性全收会把别的枝干也收掉。请点连线出口的灰「−」单独折叠某一支，再点同一颗展开">⊟ 全部收起（已停用）</button>
+  <button id="btn-expandall" title="快捷按钮：一次性把所有枝干全部摊开。平时想展开哪一枝，点哪张卡片右下角的小箭头即可">⊞ 全部展开</button>
+  <button id="btn-hiddenlist" style="display:none" title="这些卡片被你单独藏起来了，点开清单可以挑着放回来">👁 已藏 0 张</button>
+  <div id="hidden-panel" style="display:none"></div>
   <button id="btn-flow" data-i18n="flow" data-i18n-title="flowTip" title="先点一下连线选中它，再点这个：给这根线加流动箭头（命令传达动效）；再点取消">流动箭头</button>
   <div class="sep"></div>
   <span class="palette-label" data-i18n="cardSize">卡片大小</span>
@@ -390,7 +431,7 @@ var fileInput = document.getElementById("file-input");
 var btnUndo   = document.getElementById("btn-undo");
 var btnRedo   = document.getElementById("btn-redo");
 
-var state = { nodes: [], edges: [], vp: { x: 0, y: 0, k: 1 }, edgeStyle: "curve", defaultColor: null, defaultScale: 1 };
+var state = { nodes: [], edges: [], vp: { x: 0, y: 0, k: 1 }, edgeStyle: "curve", defaultColor: null, defaultScale: 1, collapsed: {}, hidden: {} };
 var selectedId = null;
 var selectedEdgeId = null;  /* v1.4：选中的连线，按 Backspace/Delete 才删 */
 var rootId = null;
@@ -554,7 +595,9 @@ function cloneDeep(o){ try { return JSON.parse(JSON.stringify(o)); } catch(e){ r
 function makePage(name){
   return { id:'pg'+Date.now()+Math.floor(Math.random()*1000), name:name||'第1页',
            nodes:cloneDeep(state.nodes), edges:cloneDeep(state.edges),
-           edgeStyle:state.edgeStyle, defaultColor:state.defaultColor, vp:cloneDeep(state.vp) };
+           edgeStyle:state.edgeStyle, defaultColor:state.defaultColor, vp:cloneDeep(state.vp),
+           collapsed:cloneDeep(state.collapsed || {}),
+           hidden:cloneDeep(state.hidden || {}) };
 }
 function pageById(id){ for (var i=0;i<pages.length;i++) if(pages[i].id===id) return pages[i]; return null; }
 function activePage(){ return pageById(activePageId); }
@@ -564,6 +607,8 @@ function loadIntoState(p){
   state.edgeStyle = (p.edgeStyle==='ortho')?'ortho':'curve';
   state.defaultColor = p.defaultColor||null;
   state.vp = p.vp ? cloneDeep(p.vp) : {x:0,y:0,k:1};
+  state.collapsed = p.collapsed ? cloneDeep(p.collapsed) : {};
+  state.hidden = p.hidden ? cloneDeep(p.hidden) : {};
   rootId = state.nodes.length ? state.nodes[0].id : null;
 }
 function sanitizeName(s){ return (s||'').replace(/[\\/:*?"<>|]/g,'_').slice(0,40); }
@@ -795,14 +840,193 @@ function contrastText(hex){
   return lum > 0.6 ? "#2c3038" : "#ffffff";
 }
 
+/* ===================== v4.0 折叠 / 展开（演示模式） =====================
+   数据：state.collapsed = { 节点id: 1 }，表示「这一张卡片被折叠」。
+   折叠一张卡 = 它自己连同下面整支都不画；别的枝干一律不动（手术刀式）。
+   操作：每条「父→子」连线的父卡出口处都有一颗常驻灰「−」圆点（边缘外 10px），
+     点它只收这一张卡；卡收起后圆点仍在原位、仍是同一个灰减号，再点它就展开。
+     折叠后不显示蓝色「＋」和任何卡名文字，也不新增任何标记。
+   圆点挂在连线上而非子卡上，所以收起后一定有展开入口；「全部收起」已停用。
+   折叠状态会一起存进浏览器缓存和分享副本，发给客户看到的就是你平时摆好的样子。 */
+function childMap(){
+  var m = {}, i, e;
+  for (i = 0; i < state.edges.length; i++){
+    e = state.edges[i];
+    if (!m[e.from]) m[e.from] = [];
+    if (m[e.from].indexOf(e.to) < 0) m[e.from].push(e.to);
+  }
+  return m;
+}
+function descendCount(id, cm){
+  var seen = {}, stack = (cm[id] || []).slice(), n = 0, cur;
+  while (stack.length){
+    cur = stack.pop();
+    if (seen[cur]) continue;
+    seen[cur] = 1; n++;
+    (cm[cur] || []).forEach(function(k){ if (!seen[k]) stack.push(k); });
+  }
+  return n;
+}
+function computeHidden(){
+  /* v4.2 每个枝干独立：从"源头卡片"顺着枝干往下走，走到被收起的卡片就停住，不再往它下面走。
+     走得到的卡片 = 显示；走不到的才隐藏。
+     这样每张卡片只管自己脚下这一枝，绝不牵连别的枝干；
+     一张卡如果同时挂在两条枝干上，只要还有一条没被收起，它照样显示。 */
+  var cm = childMap(), hidN = {}, hidE = {}, id, i, e, cur, kids;
+
+  /* ① 找源头卡片：没有任何连线指向它（多根、散落卡片都算起点） */
+  var hasParent = {};
+  for (i = 0; i < state.edges.length; i++) hasParent[state.edges[i].to] = 1;
+  var seeds = [];
+  for (i = 0; i < state.nodes.length; i++){
+    id = state.nodes[i].id;
+    if (!hasParent[id]) seeds.push(id);
+  }
+  if (rootId && seeds.indexOf(rootId) < 0) seeds.push(rootId);
+
+  /* ② 顺着枝干往下走：遇到收起的卡片就停 */
+  var vis = {}, stack = seeds.slice();
+  while (stack.length){
+    cur = stack.pop();
+    if (vis[cur]) continue;
+    /* v5.0：被单独藏起来的卡片——这一张连同它下面整条都不画 */
+    if (state.hidden && state.hidden[cur]) continue;
+    /* v6.0 手术刀：被折叠的是「这一张卡自己」——它不画，也不再往它下面走；
+       别的枝干照常走，绝不牵连。 */
+    if (state.collapsed && state.collapsed[cur]) continue;
+    vis[cur] = 1;
+    kids = cm[cur] || [];
+    for (i = 0; i < kids.length; i++){ if (!vis[kids[i]]) stack.push(kids[i]); }
+  }
+
+  /* ③ 没走到的才隐藏；万一算成全藏（成环/脏数据），宁可全显示 */
+  var shown = 0;
+  for (i = 0; i < state.nodes.length; i++){
+    id = state.nodes[i].id;
+    if (vis[id]) shown++; else hidN[id] = 1;
+  }
+  if (!shown && state.nodes.length && !(state.hidden && Object.keys(state.hidden).length)){ hidN = {}; }
+
+  /* ④ 连线：两端都在才画；被收起卡片自己伸出去的那条线也不画 */
+  for (i = 0; i < state.edges.length; i++){
+    e = state.edges[i];
+    if (hidN[e.from] || hidN[e.to]) hidE[e.id] = 1;
+    else if (state.collapsed && state.collapsed[e.from]) hidE[e.id] = 1;
+  }
+  return { nodes: hidN, edges: hidE, cm: cm };
+}
+var hiddenNodes = {};            /* 本帧被藏起来的节点集合，头像层复用 */
+function toggleFold(id){
+  if (!state.collapsed) state.collapsed = {};
+  if (state.collapsed[id]){
+    /* 放回来：只清这一张，别的折叠状态一律不动 */
+    delete state.collapsed[id];
+  } else {
+    /* v6.0：源头卡（没有任何连线指向它）不许整张收起，
+       否则全图消失、连展开的圆点都没地方挂。叶子卡也能单独收。 */
+    var hasParent = false;
+    for (var fi = 0; fi < state.edges.length; fi++){
+      if (state.edges[fi].to === id){ hasParent = true; break; }
+    }
+    if (!hasParent){
+      toast("这是源头卡片，不能整张收起；请收它下面的分支");
+      return false;
+    }
+    state.collapsed[id] = 1;
+  }
+  render(); save();
+  return true;
+}
+function setAllFold(col){
+  if (col){
+    /* v6.0：一次性全收正是「一折叠全给我折叠了」的元凶，停用 */
+    toast("请点连线出口的小圆点单独折叠某一支；这里不再一次性全收");
+    return;
+  }
+  state.collapsed = {};
+  state.hidden = {};   /* 全部展开时，单独藏起来的也一并放回来 */
+  render(); save();
+  toast(LANG === 'en' ? "All expanded" : "已全部展开");
+}
+var _btnCA = document.getElementById("btn-collapseall");
+if (_btnCA) _btnCA.addEventListener("click", function(){ toast("请点连线出口的小圆点单独折叠某一支；这里不再一次性全收"); });
+/* ===================== v5.0 单卡隐藏（每张卡都能单独藏） =====================
+   场景：12 门并列的少儿课，想只留 1 张展示，其余 11 张各自藏掉。
+   state.hidden = { 节点id: 1 } —— 被藏的那一张连同它下面整条都不画。
+   藏了不会丢：工具栏「👁 已藏 N 张」点开有清单，能单独放回任意一张。 */
+function toggleHide(id){
+  if (!state.hidden) state.hidden = {};
+  if (state.hidden[id]) delete state.hidden[id]; else state.hidden[id] = 1;
+  render(); save(); refreshHiddenBar();
+  if (typeof toast === "function" && state.hidden[id]){
+    var nm = ""; for (var i = 0; i < state.nodes.length; i++){ if (state.nodes[i].id === id) { nm = nodeText(state.nodes[i]) || "这一张"; break; } }
+    toast("已藏起：" + String(nm).replace(/\n/g, " ").slice(0, 12) + "  ·  工具栏「👁 已藏」可放回");
+  }
+}
+function unhideOne(id){ if (state.hidden){ delete state.hidden[id]; } render(); save(); refreshHiddenBar(); }
+function unhideAll(){ state.hidden = {}; render(); save(); refreshHiddenBar(); }
+function hiddenIds(){ var a = [], k; for (k in (state.hidden || {})) a.push(k); return a; }
+function refreshHiddenBar(){
+  var btn = document.getElementById("btn-hiddenlist");
+  if (!btn) return;
+  var n = hiddenIds().length;
+  btn.style.display = n ? "" : "none";
+  btn.textContent = "👁 已藏 " + n + " 张";
+  var panel = document.getElementById("hidden-panel");
+  if (panel && panel.style.display !== "none") buildHiddenPanel();
+}
+function buildHiddenPanel(){
+  var panel = document.getElementById("hidden-panel");
+  if (!panel) return;
+  var ids = hiddenIds(), i, j, nd, nm;
+  var h = '<div class="hp-title">已藏起来的卡片（' + ids.length + ' 张）</div><div class="hp-list">';
+  if (!ids.length) h += '<div class="hp-row"><span>（都放出来了）</span></div>';
+  for (i = 0; i < ids.length; i++){
+    nd = null;
+    for (j = 0; j < state.nodes.length; j++){ if (state.nodes[j].id === ids[i]) { nd = state.nodes[j]; break; } }
+    if (!nd) continue;
+    nm = String(nodeText(nd) || "卡片").replace(/\n/g, " ");
+    if (nm.length > 14) nm = nm.slice(0, 14) + "…";
+    h += '<div class="hp-row"><span title="' + escapeHtml(nm) + '">' + escapeHtml(nm) + '</span><button data-nid="' + nd.id + '">放出来</button></div>';
+  }
+  h += '</div><div class="hp-foot"><button id="hp-all">全部放出来</button><button id="hp-close">关闭</button></div>';
+  panel.innerHTML = h;
+  Array.prototype.forEach.call(panel.querySelectorAll("[data-nid]"), function(b){
+    b.addEventListener("click", function(ev){ ev.stopPropagation(); unhideOne(b.getAttribute("data-nid")); });
+  });
+  var ba = panel.querySelector("#hp-all"); if (ba) ba.addEventListener("click", function(ev){ ev.stopPropagation(); unhideAll(); });
+  var bc = panel.querySelector("#hp-close"); if (bc) bc.addEventListener("click", function(ev){ ev.stopPropagation(); panel.style.display = "none"; });
+}
+var _btnHL = document.getElementById("btn-hiddenlist");
+if (_btnHL) _btnHL.addEventListener("click", function(ev){
+  ev.stopPropagation();
+  var panel = document.getElementById("hidden-panel");
+  if (!panel) return;
+  if (panel.style.display === "none"){ buildHiddenPanel(); panel.style.display = ""; }
+  else panel.style.display = "none";
+});
+document.addEventListener("click", function(ev){
+  var panel = document.getElementById("hidden-panel");
+  if (!panel || panel.style.display === "none") return;
+  if (panel.contains(ev.target) || ev.target.id === "btn-hiddenlist") return;
+  panel.style.display = "none";
+});
+
+var _btnEA = document.getElementById("btn-expandall");
+if (_btnEA) _btnEA.addEventListener("click", function(){ setAllFold(false); });
+
 function render(){
   if (selectedId) selectedEdgeId = null;  /* v1.4：选中节点时取消连线选中，二者互斥 */
   viewport.setAttribute("transform",
     "translate(" + state.vp.x + "," + state.vp.y + ") scale(" + state.vp.k + ")");
   applyWorldTransform();   /* v3.2：头像层 world 容器与 viewport 同步 */
 
+  var FOLD = computeHidden();        /* v4.0：先算哪些节点被收起 */
+  hiddenNodes = FOLD.nodes;
+  if (selectedId && FOLD.nodes[selectedId]) selectedId = null;   /* 选中的卡被收起就取消选中 */
   layerEdge.textContent = "";
   state.edges.forEach(function(e){
+    if (FOLD.edges[e.id]) return;    /* v4.0：被收起的分支，连线不画 */
     var a = byId(e.from), b = byId(e.to);
     if (!a || !b) return;
     var d = edgePath(a, b);
@@ -862,6 +1086,7 @@ function render(){
 
   layerNode.textContent = "";
   state.nodes.forEach(function(n){
+    if (FOLD.nodes[n.id]) return;    /* v4.0：被收起的分支，卡片不画 */
     var box = nodeBox(n);
     var sc = n.scale || 1;          /* v2.4：单卡缩放系数 */
     var w = box.w * sc, h = box.h * sc;
@@ -892,6 +1117,8 @@ function render(){
     g.appendChild(rect);
     g.appendChild(label);
 
+
+
     [["u",0,-h/2],["d",0,h/2],["l",-w/2,0],["r",w/2,0]].forEach(function(a){
       var c = document.createElementNS(SVGNS, "circle");
       c.setAttribute("class", "anchor");
@@ -903,10 +1130,96 @@ function render(){
 
     layerNode.appendChild(g);
   });
+
+  /* v6.2 折叠开关【固定标准：每条连线的父卡出口】
+     一条「父→子」连线 = 一颗常驻灰「−」圆点，位置只有一条公式：
+       从父卡中心沿连线方向求与父卡矩形边界的真实交点，圆点落在那条边外 10px；
+       同一父卡同一条边上的多颗圆点，按几何顺序以固定 22px 间距排成一排。
+     距边缘恒为 10px、间距恒为 22px、符号恒为灰「−」，没有随机偏移。
+     圆点挂在「连线」上而不是子卡上：子卡收起后圆点仍在原位、仍是同一个减号，
+     点它就把这一支放回来；折叠后不产生任何蓝色「＋」、卡名文字或别的标记。 */
+  var SWITCH_OUT = 10, SWITCH_GAP = 22;
+  var swItems = [];
+  state.edges.forEach(function(e){
+    if (FOLD.nodes[e.from]) return;      /* 父卡都不在了，这条线的开关也不画 */
+    var a = byId(e.from), b = byId(e.to);
+    if (!a || !b) return;
+    var ba = nodeBox(a), asc = a.scale || 1, aw = ba.w * asc, ah = ba.h * asc;
+    var dx = b.x - a.x, dy = b.y - a.y;
+    if (!dx && !dy) return;
+    /* 从父卡中心沿连线方向，求与父卡矩形边界的真实交点 */
+    var tx = dx ? (aw/2) / Math.abs(dx) : Infinity;
+    var ty = dy ? (ah/2) / Math.abs(dy) : Infinity;
+    var t  = Math.min(tx, ty);
+    var ex = a.x + dx * t, ey = a.y + dy * t;
+    var side, px, py, sc;
+    if (ty <= tx){                       /* 先撞上/下边 → 排在边缘外 10px 的水平线上 */
+      side = (dy >= 0 ? "d" : "u") + "|" + e.from;
+      px = ex; py = a.y + (dy >= 0 ? 1 : -1) * (ah/2 + SWITCH_OUT);
+      sc = px;
+    } else {                             /* 先撞左/右边 → 排在边缘外 10px 的竖直线上 */
+      side = (dx >= 0 ? "r" : "l") + "|" + e.from;
+      px = a.x + (dx >= 0 ? 1 : -1) * (aw/2 + SWITCH_OUT); py = ey;
+      sc = py;
+    }
+    swItems.push({ e:e, b:b, px:px, py:py, side:side, sc:sc });
+  });
+
+  /* 同一父卡、同一条边：按几何顺序以固定 22px 间距排成一排。
+     确定性规则，不是随机错开；所有圆点距父卡边缘恒为 10px，绝不两颗叠在一起。 */
+  var swGroups = {};
+  swItems.forEach(function(it){ (swGroups[it.side] = swGroups[it.side] || []).push(it); });
+  Object.keys(swGroups).forEach(function(k){
+    var arr = swGroups[k].sort(function(x, y){ return x.sc - y.sc; });
+    for (var gi = 1; gi < arr.length; gi++){
+      if (arr[gi].sc - arr[gi-1].sc < SWITCH_GAP) arr[gi].sc = arr[gi-1].sc + SWITCH_GAP;
+    }
+    arr.forEach(function(it){
+      if (k.charAt(0) === "l" || k.charAt(0) === "r") it.py = it.sc;
+      else it.px = it.sc;
+    });
+  });
+
+  swItems.forEach(function(it){
+    var isCol = !!(state.collapsed && state.collapsed[it.e.to]);
+    var nm = String(nodeText(it.b) || "").split("\n")[0].slice(0, 16);
+    var sg = document.createElementNS(SVGNS, "g");
+    sg.setAttribute("class", "fold-dot");
+    sg.setAttribute("transform", "translate(" + it.px + "," + it.py + ")");
+    sg.setAttribute("data-cid", it.e.to);
+    sg.setAttribute("data-edge", it.e.id);
+    var shit = document.createElementNS(SVGNS, "circle");
+    shit.setAttribute("class", "hit"); shit.setAttribute("r", 11);
+    var sring = document.createElementNS(SVGNS, "circle");
+    sring.setAttribute("class", "ring"); sring.setAttribute("r", 5.2);
+    var ssign = document.createElementNS(SVGNS, "path");
+    ssign.setAttribute("class", "sign"); ssign.setAttribute("d", "M-2.3,0 H2.3");
+    var stip = document.createElementNS(SVGNS, "title");
+    stip.textContent = (isCol ? "展开：" : "收起：") + nm + "（只动这一张）";
+    sg.appendChild(shit); sg.appendChild(sring); sg.appendChild(ssign); sg.appendChild(stip);
+    (function(kid){
+      sg.addEventListener("mousedown", function(ev){ ev.stopPropagation(); if (ev.preventDefault) ev.preventDefault(); });
+      sg.addEventListener("click", function(ev){ ev.stopPropagation(); if (ev.preventDefault) ev.preventDefault(); toggleFold(kid); });
+    })(it.e.to);
+    layerNode.appendChild(sg);
+  });
+
   syncHistButtons();
   updateSwatchActive();   /* v2.1：高亮当前卡片/默认色对应的色块 */
   renderAvatars();        /* v3.2：头像徽章跟随卡片（HTML 层，视频头像用 video 元素） */
+  refreshHiddenBar();     /* v5.0：刷新「👁 已藏 N 张」 */
 }
+
+/* v4.3：第一次打开时轻轻提示一句，之后不再打扰 */
+setTimeout(function(){
+  try{
+    if (localStorage.getItem('foldTip62')) return;
+    localStorage.setItem('foldTip62','1');
+    if (typeof toast === 'function') toast(LANG === 'en'
+      ? 'Each card corner shows "number" — click it to fold that branch only'
+      : '小提示：每条连线离开父卡的那个口子上都有一颗固定位置的灰「−」，点它只收这一张；收起后它还在原位、还是同一个减号，再点同一颗就展开，不会冒出蓝色加号和文字');
+  }catch(e){}
+}, 1400);
 
 function toWorld(clientX, clientY){
   var r = canvas.getBoundingClientRect();
@@ -1078,6 +1391,7 @@ layerNode.addEventListener("mousedown", function(ev){
   render();
   try { ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId); } catch(e){}   /* v2.3：拖卡片也锁指针，拖出窗口仍能正常松手 */
   var node = byId(id);
+  var cmNow = childMap();     /* v4.0：本次按下时先记下这张卡有没有子项 */
   var startW = toWorld(ev.clientX, ev.clientY);
   var ox = node.x, oy = node.y;
   var moved = false;
@@ -1093,7 +1407,11 @@ layerNode.addEventListener("mousedown", function(ev){
     window.removeEventListener("mousemove", move);
     window.removeEventListener("mouseup", up);
     window.removeEventListener("blur", up);
-    if (!moved) undoStack.pop(); else { dragPaint(node); save(); }
+    if (!moved) {
+      undoStack.pop();
+      /* v4.0：单击（没拖动）= 收起/展开这张卡的子项；没有子项就只当选中 */
+      /* v5.1：点卡片只选中，不再顺带折叠 */
+    } else { dragPaint(node); save(); }
     syncHistButtons();
   }
   window.addEventListener("mousemove", move);
@@ -1730,6 +2048,7 @@ function renderAvatars(){
      缩放/平移/单击选中都不重建 → 头像不闪、不闪"信"字 */
   var sig = state.nodes.map(function(n){
     if (!n.avatar) return null;
+    if (hiddenNodes[n.id]) return null;   /* v4.0：被收起的卡片，头像一并收起 */
     normAvatar(n.avatar);
     return n.id + "|" + n.avatar.id + "|" + n.avatar.kind + "|" + (n.avatar.size||AVATAR_SIZE) + "|" + (n.avatar.locked?1:0);
   }).filter(Boolean).join("##");
@@ -1738,6 +2057,7 @@ function renderAvatars(){
   avatarWorld.textContent = "";
   state.nodes.forEach(function(n){
     if (!n.avatar) return;
+    if (hiddenNodes[n.id]) return;        /* v4.0：被收起的卡片，头像一并收起 */
     var pos = avatarPos(n);
     var badge = document.createElement("div");
     badge.className = "avatar-badge" + (n.avatar.locked ? " av-locked" : "") + (selAvatarId === n.id ? " av-selected" : "");
@@ -1869,7 +2189,9 @@ function save(){
   try {
     var ap = activePage();
     if (ap){ ap.nodes = cloneDeep(state.nodes); ap.edges = cloneDeep(state.edges);
-             ap.edgeStyle = state.edgeStyle; ap.defaultColor = state.defaultColor; ap.vp = cloneDeep(state.vp); }
+             ap.edgeStyle = state.edgeStyle; ap.defaultColor = state.defaultColor; ap.vp = cloneDeep(state.vp);
+             ap.collapsed = cloneDeep(state.collapsed || {});
+             ap.hidden = cloneDeep(state.hidden || {}); }
     var payload = JSON.stringify({pages:pages, activePageId:activePageId, trash:trash, lang:LANG, savedAt:Date.now()});
     var cur = localStorage.getItem(STORE_KEY);
     if (cur) { try { localStorage.setItem(STORE_KEY_PREV, cur); } catch(e2){} }  /* 上一版快照，崩了能回滚 */
@@ -2091,7 +2413,7 @@ function download(name, content, type){
 /* ============ v2.8：分享副本（把当前图烤进一个独立 HTML，发给同事双击即看完整动态图） ============ */
 /* buildShareHtml：把『当前这一页的画布状态』烤成一份完整 HTML 源码（就地保存 + 分享副本共用） */
 function buildShareHtml(){
-  var seed = { nodes: state.nodes, edges: state.edges, edgeStyle: state.edgeStyle, defaultColor: state.defaultColor, lang: (LANG === 'en' ? 'en' : 'zh') };
+  var seed = { nodes: state.nodes, edges: state.edges, edgeStyle: state.edgeStyle, defaultColor: state.defaultColor, lang: (LANG === 'en' ? 'en' : 'zh'), collapsed: (state.collapsed || {}), hidden: (state.hidden || {}) };
   var json = JSON.stringify(seed).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   var clone = document.documentElement.cloneNode(true);
   var le = clone.querySelector("#layerEdge");    if (le)  le.innerHTML  = "";   /* 动态层清空，加载时 render 重建 */
@@ -2633,6 +2955,8 @@ if (window.__SHARE_SEED__ && !loadedFromCache) {   /* v3.5：本机已改过(loc
   state.edges = window.__SHARE_SEED__.edges || [];
   state.edgeStyle = window.__SHARE_SEED__.edgeStyle === "ortho" ? "ortho" : "curve";
   state.defaultColor = window.__SHARE_SEED__.defaultColor || null;
+  state.collapsed = window.__SHARE_SEED__.collapsed || {};
+  state.hidden = window.__SHARE_SEED__.hidden || {};   /* v5.0：单卡隐藏状态随文件走 */   /* v4.0：折叠状态随文件走 */
   if (window.__SHARE_SEED__.lang === 'en') LANG = 'en';   /* v3.0：分享版继承作者的语言 */
   rootId = state.nodes.length ? state.nodes[0].id : null;
   pages = [ makePage(LANG==='en'?'Page 1':'第1页') ]; trash = []; activePageId = pages[0].id;   /* 分享版作为单页 */
@@ -2649,6 +2973,16 @@ if (window.__SHARE_SEED__ && !loadedFromCache) {   /* v3.5：本机已改过(loc
 syncOrthoBtn();                    /* v1.8：启动时按保存的样式同步按钮 */
 renderPageBar();                  /* v2.9：渲染页签栏 */
 applyLang();                      /* v3.0：按语言刷新界面文案（含页签栏） */
+
+/* v6.0 一次性语义迁移：旧版 collapsed = 「收起后代」，新版 = 「收起这张卡自己」，
+   两者不兼容。首次用新版打开时清一次，避免继承旧版缓存里的满屏折叠状态；
+   之后用户自己的折叠状态照常持久化。 */
+try {
+  if (!localStorage.getItem('fbm_scalpel_v6')){
+    state.collapsed = {};
+    localStorage.setItem('fbm_scalpel_v6', '1');
+  }
+} catch(e){}
 
 /* v1.7：打开时有据可查——告诉你恢复了多少节点、什么时候存的 */
 (function(){
